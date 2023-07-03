@@ -13,7 +13,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.keys import Keys
 import subprocess, shlex
 from pathlib import Path
 from configparser import ConfigParser
@@ -215,11 +214,76 @@ def modifywins(data, f, arguments):
 ##################### APPLICATION ##############################
 
 
+def go_back_to_main(driver):
+    # TODO: from a specific folder, go back one
+    bread_crumbs = driver.find_elements(By.CLASS_NAME, "fm-breadcrumbs")
+    # go to prev
+    bread_crumbs[-2].click()
+    print(driver.current_url)
+
+
+def scroll_until_see_and_click(driver, folder_name):
+    # Find the row element using the specified text
+    # first check
+    row_element = []
+    try:
+        row_element = driver.find_element(
+            By.XPATH, "//td[contains(., '" + folder_name + "')]"
+        )
+        if row_element.text != folder_name:
+            row_element = []
+            raise Exception
+    except Exception as e:
+        # if not, scroll and keep checking until so
+        scrollable_div = driver.find_element(
+            By.CSS_SELECTOR, "div.grid-scrolling-table"
+        )
+        scroll_amount = driver.execute_script(
+            "return arguments[0].clientHeight;", scrollable_div
+        )
+
+        while not row_element:
+            driver.execute_script(
+                """return arguments[0].dispatchEvent(
+                new WheelEvent('wheel', {
+                    deltaX: 0,
+                    deltaY: arguments[1],
+                    deltaZ: 0,
+                    deltaMode: WheelEvent.DOM_DELTA_PIXEL,
+                    button: 1 // Middle mouse button
+                })
+            );""",
+                scrollable_div,
+                scroll_amount,
+            )
+            time.sleep(0.1)
+            # try to find
+            try:
+                row_element = driver.find_element(
+                    By.XPATH, "//td[contains(., '" + folder_name + "')]"
+                )
+                if row_element.text != folder_name:
+                    row_element = []
+                    raise Exception
+            except:
+                pass
+
+    # click into new page
+    driver.execute_script(
+        "var event = new MouseEvent('dblclick', { 'view': window, 'bubbles': true, 'cancelable': true }); arguments[0].dispatchEvent(event);",
+        row_element,
+    )
+    print(driver.current_url)
+
+
 def handle_user_response(cur_entry, driver, login):
     triage = input(
         "Default:Pass ([enter]) --- Missing (N) --- Other (mod/man/s)\n"
     ).lower()
     if triage == "n":
+        # scroll until see 'folder_name/cur_entry', double click
+        scroll_until_see_and_click(driver, cur_entry)
+
         print("Adding new entry!\n")
         while True:
             try:
@@ -239,6 +303,9 @@ def handle_user_response(cur_entry, driver, login):
         with open("winlog.json", "r+") as wl:
             data = json.loads(wl.read())
             addwins(arguments, data, wl)
+
+        # go back
+        go_back_to_main(driver)
 
     elif triage == "mod":
         # modify an existing entry
@@ -433,7 +500,7 @@ def selenium_scrape(login=False, **kwargs):
     return driver
 
 
-def scrape_page(driver, scraped_so_far):
+def scrape_page(driver, scraped_so_far_text):
     # returns newly scraped items as a list
     html = driver.page_source
 
@@ -442,7 +509,7 @@ def scrape_page(driver, scraped_so_far):
     return [
         item.text
         for item in soup.find_all("span", class_="tranfer-filetype-txt")
-        if item.text not in scraped_so_far and item.text
+        if item.text not in scraped_so_far_text and item.text
     ]
 
 
@@ -489,6 +556,25 @@ def main(login):
     while scroll_top + client_height < scroll_height:
         items_scraped += scroll_and_scrape(
             driver, items_scraped, scrollable_div, scroll_amount
+        )
+        scroll_top = driver.execute_script(
+            "return arguments[0].scrollTop;", scrollable_div
+        )
+
+    # scroll back to top
+    while scroll_top > 0:
+        driver.execute_script(
+            """return arguments[0].dispatchEvent(
+            new WheelEvent('wheel', {
+                deltaX: 0,
+                deltaY: arguments[1],
+                deltaZ: 0,
+                deltaMode: WheelEvent.DOM_DELTA_PIXEL,
+                button: 1 // Middle mouse button
+            })
+        );""",
+            scrollable_div,
+            -scroll_amount,
         )
         scroll_top = driver.execute_script(
             "return arguments[0].scrollTop;", scrollable_div
