@@ -225,22 +225,23 @@ def go_back_to_main(driver):
 def scroll_until_see_and_click(driver, folder_name):
     # Find the row element using the specified text
     # first check
-    row_element = []
+    row_element = None
     try:
         row_element = driver.find_element(
             By.XPATH, "//td[contains(., '" + folder_name + "')]"
         )
         if row_element.text != folder_name:
-            row_element = []
+            row_element = None
             raise Exception
     except Exception as e:
         # if not, scroll and keep checking until so
         scrollable_div = driver.find_element(
             By.CSS_SELECTOR, "div.grid-scrolling-table"
         )
-        scroll_amount = driver.execute_script(
+        client_height = driver.execute_script(
             "return arguments[0].clientHeight;", scrollable_div
         )
+        scroll_amount = int(client_height * 0.8)
 
         while not row_element:
             driver.execute_script(
@@ -263,10 +264,13 @@ def scroll_until_see_and_click(driver, folder_name):
                     By.XPATH, "//td[contains(., '" + folder_name + "')]"
                 )
                 if row_element.text != folder_name:
-                    row_element = []
+                    row_element = None
                     raise Exception
             except:
                 pass
+
+    # wait a bit
+    time.sleep(0.2)
 
     # click into new page
     driver.execute_script(
@@ -550,7 +554,7 @@ def main(login):
         "return arguments[0].clientHeight;", scrollable_div
     )
     scroll_top = driver.execute_script("return arguments[0].scrollTop;", scrollable_div)
-    scroll_amount = client_height
+    scroll_amount = int(client_height * 0.8)
     # first scrape on page
     items_scraped = scrape_page(driver, [])
     while scroll_top + client_height < scroll_height:
